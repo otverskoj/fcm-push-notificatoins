@@ -38,7 +38,7 @@ class PushNotifierImpl(PushNotifier):
         notification: PushNotification,
         target: Target
     ) -> None:
-        service_account_filename = 'src/firebase/iqtek-push-notifications-app-firebase-adminsdk-e9fdw-4025d3428c.json'
+        service_account_filename = 'src/firebase/firebase_config.json'
         headers = {
             'Authorization': 'Bearer ' + await self.__get_access_token(service_account_filename),
             'Content-Type': 'application/json; UTF-8',
