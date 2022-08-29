@@ -4,7 +4,7 @@ from pydantic import ValidationError
 
 from src.notifier import PushNotifier
 from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
-from src.notifier.impl.PushNotifierConfigError import PushNotifierConfigError
+from src.notifier.impl.errors.PushNotifierConfigError import PushNotifierConfigError
 from src.notifier.impl.PushNotifierImpl import PushNotifierImpl
 
 

@@ -1,5 +1,5 @@
-from src.notifier.impl.models.PushNotification import PushNotification
-from src.notifier.impl.models.Target import Target
+from src.notifier.impl.models.app.PushNotification import PushNotification
+from src.notifier.impl.models.app.Target import Target
 
 
 class PushNotifier:

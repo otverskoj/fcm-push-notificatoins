@@ -4,9 +4,9 @@ from typing import Union
 from urllib.parse import urlencode
 
 from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
-from src.notifier.impl.models.PushNotification import PushNotification
+from src.notifier.impl.models.app.PushNotification import PushNotification
 from src.notifier.core.PushNotifier import PushNotifier
-from src.notifier.impl.models.Target import Target
+from src.notifier.impl.models.app.Target import Target
 
 import aiohttp
 from google.oauth2 import service_account
