@@ -278,4 +278,4 @@ cython_debug/
 
 Pipfile*
 
-*adminsdk*.json
+*firebase*.json
