@@ -1,22 +1,19 @@
+import json
 from datetime import datetime, timedelta
-from pathlib import PurePath
-from typing import Union, Mapping, Optional, Any
+from typing import Mapping, Any, Sequence, Union
 from urllib.parse import urlencode
-
-from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
-from src.notifier.impl.models.app.PushNotification import PushNotification
-from src.notifier.core.PushNotifier import PushNotifier
-from src.notifier.impl.models.app.Target import Target
 
 import aiohttp
 from google.oauth2 import service_account
 
-
-# TODO: Refactor this class
+from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
+from src.notifier.core.PushNotifier import PushNotifier
+from src.notifier.impl.models.app.SpecificDevicePushNotification import SpecificDevicePushNotification
 from src.notifier.impl.models.firebase.Message import Message
 from src.notifier.impl.models.firebase.Request import Request
 
 
+# TODO: Refactor this class
 class PushNotifierImpl(PushNotifier):
     __slots__ = (
         '__config',
@@ -33,22 +30,37 @@ class PushNotifierImpl(PushNotifier):
 
     async def notify(
         self,
-        notification: PushNotification,
-        target: Target
+        payload: Mapping[str, Union[str, Mapping[str, Any]]]
     ) -> Mapping[str, str]:
+
+        specific_device_notification = SpecificDevicePushNotification(**payload)
+
         headers = await self.__prepare_headers()
 
         url = self.__config.fcm_endpoint.format(self.__config.project_id)
 
         # TODO: refactor firebase payload parsing/constructing
-        payload = self.__construct_fcm_request(
-            notification=notification.dict(),
-            target=target
-        ).dict(by_alias=True)
+        request = self.__construct_fcm_request(
+            notification=specific_device_notification.notification.dict(),
+            target=specific_device_notification.token
+        ).json(by_alias=True)
+        data = json.loads(request)
 
         async with aiohttp.ClientSession(self.__config.base_url) as session:
-            async with session.post(url, json=payload, headers=headers) as response:
+            async with session.post(url, json=data, headers=headers) as response:
                 return await response.json()
+
+    async def notify_multicast(
+        self,
+        payload: Mapping[Sequence[str], Mapping[str, Any]]
+    ) -> Sequence[Mapping[str, str]]:
+        pass
+
+    async def notify_batch(
+        self,
+        payload: Sequence[Mapping[str, Mapping[str, Any]]]
+    ) -> Sequence[Mapping[str, str]]:
+        pass
 
     async def __prepare_headers(self) -> Mapping[str, str]:
         access_token = await self.__get_access_token()
@@ -87,7 +99,7 @@ class PushNotifierImpl(PushNotifier):
     def __construct_fcm_request(
         self,
         notification: Mapping[str, Any],
-        target: Target
+        target: str
     ) -> Request:
         message = self.__construct_fcm_message(
             notification=notification,
@@ -101,9 +113,9 @@ class PushNotifierImpl(PushNotifier):
     def __construct_fcm_message(
         self,
         notification: Mapping[str, Any],
-        target: Target
+        target: str
     ) -> Message:
         return Message(
             notification=notification,
-            **{'token': target.token}
+            **{'token': target}
         )
