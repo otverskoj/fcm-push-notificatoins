@@ -25,4 +25,6 @@ class Message(BaseModel):
     webpush: Optional[WebpushConfig] = None
     apns: Optional[ApnsConfig] = None
     fcm_options: Optional[FcmOptions] = None
-    target: str
+    token: Optional[str] = None
+    topic: Optional[str] = None
+    condition: Optional[str] = None

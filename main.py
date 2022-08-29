@@ -1,4 +1,5 @@
 import asyncio
+from pprint import pprint
 
 import yaml
 
@@ -17,8 +18,8 @@ async def main() -> None:
 
     notification = PushNotification(**notification_payload)
     target = Target(
-        token="""ezkH09dARYqqzPCGleies7:APA91bHt1Zhr5pyN21JlIG7r-t60HtM-sr0J7WN_PP3wbqQYH1szxxUwh
-            --12QsHTOPQ5kJjDpHT6MWlooRuHIzfafZQW-8DU1J64HeOY3FRE8_oMb2Jw_x_WJV4asMNQ8tWEo2hl5QB"""
+        token="crvTv5LVRh6DKRX93pjGfz:APA91bH1-MBiZv7DwzK2Rj3JxFpqerpUQ5SQYo2tsLazzkLTSSw8EqGgpqccAA7a2yK"
+              "_V_j6f0r6Bxg9ohpFcWPm15lUw5fRnsk6sH75vGHIFwdgNa6bNxxpZ6kqYMwMVAZGsE8Yqqu8"
     )
 
     with open('config.yml', encoding='utf-8') as f:
@@ -26,7 +27,8 @@ async def main() -> None:
 
     push_notifier_factory = PushNotifierFactory()
     push_notifier = push_notifier_factory(settings)
-    await push_notifier.notify(notification, target)
+    res = await push_notifier.notify(notification, target)
+    pprint(res)
 
 
 if __name__ == '__main__':

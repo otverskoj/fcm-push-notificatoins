@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from pathlib import PurePath
-from typing import Union, Mapping, Optional
+from typing import Union, Mapping, Optional, Any
 from urllib.parse import urlencode
 
 from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
@@ -13,6 +13,10 @@ from google.oauth2 import service_account
 
 
 # TODO: Refactor this class
+from src.notifier.impl.models.firebase.Message import Message
+from src.notifier.impl.models.firebase.Request import Request
+
+
 class PushNotifierImpl(PushNotifier):
     __slots__ = (
         '__config',
@@ -31,21 +35,20 @@ class PushNotifierImpl(PushNotifier):
         self,
         notification: PushNotification,
         target: Target
-    ) -> None:
+    ) -> Mapping[str, str]:
         headers = await self.__prepare_headers()
 
         url = self.__config.fcm_endpoint.format(self.__config.project_id)
 
-        payload = {
-            'message': {
-                'token': target.token,
-                'notification': notification.dict()
-            }
-        }
+        # TODO: refactor firebase payload parsing/constructing
+        payload = self.__construct_fcm_request(
+            notification=notification.dict(),
+            target=target
+        ).dict(by_alias=True)
 
         async with aiohttp.ClientSession(self.__config.base_url) as session:
             async with session.post(url, json=payload, headers=headers) as response:
-                print(await response.json())
+                return await response.json()
 
     async def __prepare_headers(self) -> Mapping[str, str]:
         access_token = await self.__get_access_token()
@@ -80,3 +83,27 @@ class PushNotifierImpl(PushNotifier):
 
         self.__credentials.expiry = datetime.utcnow() + timedelta(seconds=response_data["expires_in"])
         self.__credentials.token = response_data["access_token"]
+
+    def __construct_fcm_request(
+        self,
+        notification: Mapping[str, Any],
+        target: Target
+    ) -> Request:
+        message = self.__construct_fcm_message(
+            notification=notification,
+            target=target
+        )
+        return Request(
+            message=message
+        )
+
+    # TODO: fix token/condition/topic selection
+    def __construct_fcm_message(
+        self,
+        notification: Mapping[str, Any],
+        target: Target
+    ) -> Message:
+        return Message(
+            notification=notification,
+            **{'token': target.token}
+        )
