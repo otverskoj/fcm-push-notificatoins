@@ -1,2 +1,3 @@
 class PushNotifierConfigError(Exception):
-    """Bad arguments for push notifier config."""
+    def __str__(self):
+        return "Bad arguments for push notifier config."
