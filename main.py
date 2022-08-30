@@ -16,12 +16,6 @@ async def main() -> None:
         }
     }
 
-    # notification = PushNotification(**notification_payload)
-    # target = Target(
-    #     token="crvTv5LVRh6DKRX93pjGfz:APA91bH1-MBiZv7DwzK2Rj3JxFpqerpUQ5SQYo2tsLazzkLTSSw8EqGgpqccAA7a2yK"
-    #           "_V_j6f0r6Bxg9ohpFcWPm15lUw5fRnsk6sH75vGHIFwdgNa6bNxxpZ6kqYMwMVAZGsE8Yqqu8"
-    # )
-
     with open('config.yml', encoding='utf-8') as f:
         settings = yaml.safe_load(f)
 
