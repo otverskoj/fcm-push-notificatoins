@@ -22,7 +22,7 @@ async def main() -> None:
     push_notifier_factory = PushNotifierFactory()
     push_notifier = push_notifier_factory(settings)
     # res = await push_notifier.notify(notification_payload)
-    res = await push_notifier.notify_multicast(notification_payload)
+    res = await push_notifier.notify_batch([notification_payload, notification_payload])
     pprint(res)
 
 

@@ -14,12 +14,6 @@ class PushNotifier:
     ) -> Mapping[str, str]:
         raise NotImplementedError()
 
-    async def notify_multicast(
-        self,
-        payload: Mapping[str, Any]
-    ) -> Sequence[Mapping[str, str]]:
-        raise NotImplementedError()
-
     async def notify_batch(
         self,
         payload: Sequence[Mapping[str, Any]]

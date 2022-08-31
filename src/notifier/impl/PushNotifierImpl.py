@@ -1,11 +1,13 @@
 import json
 from datetime import datetime, timedelta
-from typing import Mapping, Any, Sequence, Union, Dict, Iterable
+from http.client import HTTPResponse
+from io import BytesIO
+from typing import Mapping, Any, Sequence, Dict, Iterable
 from urllib.parse import urlencode
 
 import aiohttp
 from google.oauth2 import service_account
-from multidict import CIMultiDict
+import urllib3
 
 from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
 from src.notifier.core.PushNotifier import PushNotifier
@@ -18,7 +20,8 @@ from src.notifier.impl.models.firebase.Request import Request
 class PushNotifierImpl(PushNotifier):
     __slots__ = (
         '__config',
-        '__credentials'
+        '__credentials',
+        '__url'
     )
 
     def __init__(self, config: PushNotifierConfig) -> None:
@@ -28,6 +31,7 @@ class PushNotifierImpl(PushNotifier):
                 filename=self.__config.service_account_filename,
                 scopes=self.__config.scopes
             )
+        self.__url = self.__config.fcm_endpoint.format(self.__config.project_id)
 
     async def notify(
         self,
@@ -36,72 +40,72 @@ class PushNotifierImpl(PushNotifier):
 
         headers = await self.__prepare_headers()
 
-        url = self.__config.fcm_endpoint.format(self.__config.project_id)
-
-        request = self.__construct_fcm_request_to_specific_device(
+        request = self.__construct_single(
            request_payload=payload
         )
 
         data = json.loads(request.json(by_alias=True))
 
         async with aiohttp.ClientSession(self.__config.base_url) as session:
-            async with session.post(url, json=data, headers=headers) as response:
+            async with session.post(self.__url, json=data, headers=headers) as response:
                 return await response.json()
 
-    async def notify_multicast(
-        self,
-        payload: Mapping[str, Any]
+    async def notify_batch(
+            self,
+            payload: Sequence[Mapping[str, Any]]
     ) -> Sequence[Mapping[str, str]]:
-        with aiohttp.MultipartWriter() as mp_writer:
-            headers = CIMultiDict({
-                "Content-Type": "application/http",
-                "Content-Transfer-Encoding": "binary",
-                "Authorization": f"Bearer {await self.__get_access_token()}",
-            })
+        assert len(payload) < 500, "Can't send more than 500 messages at a time"
 
-            request = self.__construct_fcm_request_to_specific_device(
-                request_payload=payload
-            )
-
-            data = json.loads(request.json(by_alias=True))
-
-            mp_writer.append_json(obj=data, headers=headers)
-
-        url = self.__config.fcm_endpoint.format(self.__config.project_id)
+        requests_payload = [
+            self.__construct_single(request_payload=p)
+            for p in payload
+        ]
+        request_data = await self.__construct_multipart(requests_payload)
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(url=self.__config.batch_url, data=mp_writer) as response:
+            async with session.post(
+                    url=self.__config.batch_url,
+                    data=request_data,
+                    headers={
+                        "Content-Type": "multipart/mixed; boundary='subrequest_boundary'"
+                    }
+            ) as response:
                 # decoded_response = await self.__read_multipart_response(response)
                 # print(response.request_info)
                 # print(response.headers)
                 # print(await response.text())
-                return await response.json()
+                return await self.__read_multipart_response(response)
 
+    # TODO: Create model for FCM response
     async def __read_multipart_response(
         self,
         response: aiohttp.ClientResponse
-    ) -> Iterable[Any]:
+    ) -> Sequence[Any]:
         reader = aiohttp.MultipartReader.from_response(response)
-        metadata = None
-        text = None
+        responses_body = []
         while True:
             part = await reader.next()
             if part is None:
                 break
-            elif part.headers[aiohttp.hdrs.CONTENT_TYPE] == 'application/json':
-                metadata = await part.json()
-                continue
-            elif part.headers[aiohttp.hdrs.CONTENT_TYPE] == 'text/html':
-                text = await part.text()
-                continue
+            raw_bytes = await part.read()
+            responses_body.append(self.__multipart_bytes_to_json(raw_bytes))
+        return responses_body
 
-        return metadata, text
+    def __multipart_bytes_to_json(self, raw_bytes: bytes) -> Dict[str, Any]:
+        class BytesIOSocketWrapper:
+            def __init__(self, content):
+                self.handle = BytesIO(content)
 
-    async def notify_batch(
-        self,
-        payload: Sequence[Mapping[str, Any]]
-    ) -> Sequence[Mapping[str, str]]:
-        pass
+            def makefile(self, mode):
+                return self.handle
+
+        sock = BytesIOSocketWrapper(raw_bytes)
+
+        response = HTTPResponse(sock)
+        response.begin()
+
+        response = urllib3.HTTPResponse.from_httplib(response)
+        return json.loads(response.data)
 
     async def __prepare_headers(self) -> Dict[str, str]:
         access_token = await self.__get_access_token()
@@ -137,7 +141,7 @@ class PushNotifierImpl(PushNotifier):
         self.__credentials.expiry = datetime.utcnow() + timedelta(seconds=response_data["expires_in"])
         self.__credentials.token = response_data["access_token"]
 
-    def __construct_fcm_request_to_specific_device(
+    def __construct_single(
         self,
         request_payload: Mapping[str, Any],
     ) -> Request:
@@ -146,3 +150,18 @@ class PushNotifierImpl(PushNotifier):
         return Request(
             message=message
         )
+
+    async def __construct_multipart(self, request_models: Sequence[Request]) -> str:
+        headers = "Content-Type: application/http\nContent-Transfer-Encoding: binary\n" \
+                 f"Authorization: Bearer {await self.__get_access_token()}\n\n"
+        method_line = f"POST {self.__url}\n"
+        additional_headers = "Content-Type: application/json\naccept: application/json\n\n"
+        boundary = "--subrequest_boundary\n"
+
+        body = f"{boundary}{headers}{method_line}{additional_headers}" + "{}\n"
+
+        multipart = ''
+        for req in request_models:
+            multipart = f"{multipart}{body.format(req.json(by_alias=True))}"
+
+        return f"{multipart}{boundary.strip()}--"
