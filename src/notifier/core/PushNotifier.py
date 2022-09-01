@@ -1,8 +1,12 @@
-from typing import Sequence, Mapping, Any, Union
+from typing import Sequence, Mapping, Any
+
+from src.notifier.impl.models.app.FCMBatchHTTPResponse import FCMBatchHTTPResponse
+from src.notifier.impl.models.app.FCMHTTPResponse import FCMHTTPResponse
 
 
-SpecificPayload = Mapping[str, Any]
-MulticastPayload = Mapping[Sequence[str], Mapping[str, Any]]
+__all__ = [
+    'PushNotifier'
+]
 
 
 class PushNotifier:
@@ -11,11 +15,11 @@ class PushNotifier:
     async def notify(
         self,
         payload: Mapping[str, Any]
-    ) -> Mapping[str, str]:
+    ) -> FCMHTTPResponse:
         raise NotImplementedError()
 
     async def notify_batch(
         self,
         payload: Sequence[Mapping[str, Any]]
-    ) -> Sequence[Mapping[str, str]]:
+    ) -> FCMBatchHTTPResponse:
         raise NotImplementedError()

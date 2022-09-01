@@ -8,6 +8,11 @@ from src.notifier.impl.errors.PushNotifierConfigError import PushNotifierConfigE
 from src.notifier.impl.PushNotifierImpl import PushNotifierImpl
 
 
+__all__ = [
+    'PushNotifierFactory'
+]
+
+
 class PushNotifierFactory:
     __slots__ = ()
 

@@ -5,6 +5,11 @@ from pydantic import BaseModel, validator, root_validator
 from src.notifier.impl.models.app.PushNotification import PushNotification
 
 
+__all__ = [
+    'SpecificDevicePushNotification'
+]
+
+
 class SpecificDevicePushNotification(BaseModel):
     token: Optional[str] = None
     topic: Optional[str] = None
