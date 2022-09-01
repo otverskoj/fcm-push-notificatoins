@@ -1,10 +1,22 @@
+from typing import Mapping, Optional
+
 from pydantic import BaseModel
 
+from .ApnsPayload import ApnsPayload
 
 __all__ = [
-    'ApnsConfig'
+    'ApnsConfig',
+    'ApnsFcmOptions'
 ]
 
 
+class ApnsFcmOptions(BaseModel):
+    analytics_label: str
+    image: str
+
+
 class ApnsConfig(BaseModel):
-    pass
+    headers: Optional[Mapping[str, str]] = None
+    payload: Optional[ApnsPayload] = None
+    fcm_options: Optional[ApnsFcmOptions] = None
+
