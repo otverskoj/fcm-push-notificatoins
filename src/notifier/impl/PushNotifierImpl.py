@@ -1,27 +1,29 @@
 import json
-from datetime import datetime, timedelta
-from http.client import HTTPResponse
 from io import BytesIO
-from typing import Mapping, Any, Sequence, Dict, Iterable
 from urllib.parse import urlencode
+from http.client import HTTPResponse
+from datetime import datetime, timedelta
+from typing import Mapping, Any, Sequence, Dict
 
 import aiohttp
-from google.oauth2 import service_account
 import urllib3
+from google.oauth2 import service_account
 
-from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
 from src.notifier.core.PushNotifier import PushNotifier
+from src.notifier.impl.PushNotifierConfig import PushNotifierConfig
+from src.notifier.impl.errors.FCMServerError import FCMServerError
+from src.notifier.impl.models.app.FCMResponse import FCMResponse
 from src.notifier.impl.models.app.SpecificDevicePushNotification import SpecificDevicePushNotification
 from src.notifier.impl.models.firebase.Message import Message
 from src.notifier.impl.models.firebase.Request import Request
 
 
-# TODO: Refactor this class
 class PushNotifierImpl(PushNotifier):
     __slots__ = (
         '__config',
         '__credentials',
-        '__url'
+        '__url',
+        '__fcm_error_codes'
     )
 
     def __init__(self, config: PushNotifierConfig) -> None:
@@ -32,11 +34,12 @@ class PushNotifierImpl(PushNotifier):
                 scopes=self.__config.scopes
             )
         self.__url = self.__config.fcm_endpoint.format(self.__config.project_id)
+        self.__fcm_error_codes = (400, 404, 403, 429, 503, 500, 401)
 
     async def notify(
         self,
         payload: Mapping[str, Any]
-    ) -> Mapping[str, str]:
+    ) -> FCMResponse:
 
         headers = await self.__prepare_headers()
 
@@ -48,35 +51,44 @@ class PushNotifierImpl(PushNotifier):
 
         async with aiohttp.ClientSession(self.__config.base_url) as session:
             async with session.post(self.__url, json=data, headers=headers) as response:
-                return await response.json()
+                body = await response.json()
+
+        if response.status in self.__fcm_error_codes:
+            raise FCMServerError(body)
+        return FCMResponse(**body)
 
     async def notify_batch(
-            self,
-            payload: Sequence[Mapping[str, Any]]
-    ) -> Sequence[Mapping[str, str]]:
+        self,
+        payload: Sequence[Mapping[str, Any]]
+    ) -> Sequence[FCMResponse]:
+
         assert len(payload) < 500, "Can't send more than 500 messages at a time"
 
         requests_payload = [
             self.__construct_single(request_payload=p)
             for p in payload
         ]
-        request_data = await self.__construct_multipart(requests_payload)
+
+        subrequest_boundary = 'subrequest_boundary'
+        request_data = await self.__construct_multipart(
+            request_models=requests_payload,
+            subrequest_boundary=subrequest_boundary
+        )
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
                     url=self.__config.batch_url,
                     data=request_data,
                     headers={
-                        "Content-Type": "multipart/mixed; boundary='subrequest_boundary'"
+                        "Content-Type": f"multipart/mixed; boundary='{subrequest_boundary}'"
                     }
             ) as response:
-                # decoded_response = await self.__read_multipart_response(response)
-                # print(response.request_info)
-                # print(response.headers)
-                # print(await response.text())
-                return await self.__read_multipart_response(response)
+                if response.status in self.__fcm_error_codes:
+                    error_json = await response.json()
+                    raise FCMServerError(error_json)
+                responses_body = await self.__read_multipart_response(response)
+                return [FCMResponse(**r) for r in responses_body]
 
-    # TODO: Create model for FCM response
     async def __read_multipart_response(
         self,
         response: aiohttp.ClientResponse
@@ -126,7 +138,7 @@ class PushNotifierImpl(PushNotifier):
         data = urlencode(
             {
                 "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                "assertion": self.__credentials._make_authorization_grant_assertion(),
+                "assertion": getattr(self.__credentials, '_make_authorization_grant_assertion')(),
             }
         ).encode("utf-8")
 
@@ -151,12 +163,16 @@ class PushNotifierImpl(PushNotifier):
             message=message
         )
 
-    async def __construct_multipart(self, request_models: Sequence[Request]) -> str:
+    async def __construct_multipart(
+        self,
+        request_models: Sequence[Request],
+        subrequest_boundary: str = 'subrequest_boundary'
+    ) -> str:
         headers = "Content-Type: application/http\nContent-Transfer-Encoding: binary\n" \
                  f"Authorization: Bearer {await self.__get_access_token()}\n\n"
         method_line = f"POST {self.__url}\n"
         additional_headers = "Content-Type: application/json\naccept: application/json\n\n"
-        boundary = "--subrequest_boundary\n"
+        boundary = f"--{subrequest_boundary}\n"
 
         body = f"{boundary}{headers}{method_line}{additional_headers}" + "{}\n"
 

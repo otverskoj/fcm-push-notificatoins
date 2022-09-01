@@ -4,6 +4,7 @@ from pprint import pprint
 import yaml
 
 from src.notifier import PushNotifierFactory
+from src.notifier.impl.errors.FCMServerError import FCMServerError
 
 
 async def main() -> None:
@@ -21,9 +22,13 @@ async def main() -> None:
 
     push_notifier_factory = PushNotifierFactory()
     push_notifier = push_notifier_factory(settings)
-    # res = await push_notifier.notify(notification_payload)
-    res = await push_notifier.notify_batch([notification_payload, notification_payload])
-    pprint(res)
+    try:
+        res = await push_notifier.notify_batch(
+            payload=[notification_payload, notification_payload]
+        )
+        pprint(res)
+    except FCMServerError as e:
+        print(e.error_model.error.message)
 
 
 if __name__ == '__main__':
